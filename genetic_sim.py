@@ -19,8 +19,11 @@ from plotting import plot_food
 from plotting import plot_organism
 
 import plotting_pygame
+import cv2
+import os
 import numpy as np
 import operator
+import pygame
 
 from math import atan2
 from math import cos
@@ -37,7 +40,10 @@ from random import uniform
 # --- CONSTANTS ----------------------------------------------------------------+
 
 settings = {}
+frames = []
 
+clock = pygame.time.Clock()
+width, height = 800, 600
 # EVOLUTION SETTINGS
 settings["pop_size"] = 50  # number of organisms
 settings["food_num"] = 100  # number of food particles
@@ -57,9 +63,9 @@ settings["x_max"] = 2.0  # arena eastern border
 settings["y_min"] = -2.0  # arena southern border
 settings["y_max"] = 2.0  # arena northern border
 
-settings["plot"] = True  # plot final generation?
+settings["plot"] = False  # plot final generation?
 
-settings["plot_pygame"] = False  # plot final generation using pygame?
+settings["plot_pygame"] = True  # plot final generation using pygame?
 
 # ORGANISM NEURAL NET SETTINGS
 settings["inodes"] = 1  # number of input nodes
@@ -141,7 +147,18 @@ def ppos(x, y):
     return (int(x * 112 + 450), int(y * 112 + 300))
 
 
-def plot_frame_pygame(settings, organisms, foods, gen, time):
+# Function to save the current frame as an image
+def save_frame_as_image(frame_count):
+    # Create a folder to store the images
+    output_folder = "frames"
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Save the current Pygame display as an image
+    filename = os.path.join(output_folder, f"frame_{frame_count:04d}.png")
+    pygame.image.save(screen, filename)
+
+
+def plot_frame_pygame(settings, organisms, foods, gen, time, frame_count):
     global screen
 
     screen.fill((255, 255, 255))
@@ -159,6 +176,43 @@ def plot_frame_pygame(settings, organisms, foods, gen, time):
     screen.blit(s1, (80, 75))
     screen.blit(s2, (80, 150))
     pygame.display.flip()
+
+    save_frame_as_image(frame_count)
+
+    # frame = pygame.surfarray.array3d(screen)
+    # frames.append(frame)
+
+    # clock.tick(30)
+
+    # out = cv2.VideoWriter(
+    #     "output_video.avi", cv2.VideoWriter_fourcc(*"XVID"), 30, (width, height)
+    # )
+    # for frame in frames:
+    #     out.write(frame)
+    # out.release()
+
+
+def create_video_from_images(image_folder, output_video_filename):
+    images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
+    images.sort(key=lambda x: int(x.split("_")[1].split(".")[0]))
+
+    # Get the first image's dimensions to set up the VideoWriter
+    first_image = cv2.imread(os.path.join(image_folder, images[0]))
+    height, width, layers = first_image.shape
+
+    # Create VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    video = cv2.VideoWriter(output_video_filename, fourcc, 30, (width, height))
+
+    # Write each image as a frame in the video
+    for image in images:
+        img_path = os.path.join(image_folder, image)
+        frame = cv2.imread(img_path)
+        video.write(frame)
+
+    # Release VideoWriter and destroy any open windows
+    video.release()
+    cv2.destroyAllWindows()
 
 
 def evolve(settings, organisms_old, gen):
@@ -248,11 +302,13 @@ def evolve(settings, organisms_old, gen):
 
 def simulate(settings, organisms, foods, gen):
     total_time_steps = int(settings["gen_time"] / settings["dt"])
-
+    frame_count = 0
     if settings["plot_pygame"] and gen == settings["gens"] - 1:
         input("> ENTER TO SIMULATE WITH PYGAME")
         init_pygame_mode()
+
     # --- CYCLE THROUGH EACH TIME STEP ---------------------+
+
     for t_step in range(0, total_time_steps, 1):
         # PLOT SIMULATION FRAME
         if settings["plot"] == True and gen == settings["gens"] - 1:
@@ -264,7 +320,8 @@ def simulate(settings, organisms, foods, gen):
                     running = False
             if not running:
                 break
-            plot_frame_pygame(settings, organisms, foods, gen, t_step)
+            plot_frame_pygame(settings, organisms, foods, gen, t_step, frame_count)
+            frame_count += 1
         # UPDATE FITNESS FUNCTION
         for food in foods:
             for org in organisms:
@@ -301,6 +358,9 @@ def simulate(settings, organisms, foods, gen):
             org.update_pos(settings)
     if settings["plot_pygame"] and gen == settings["gens"] - 1:
         pygame.quit()
+    if settings["plot_pygame"] and gen == settings["gens"] - 1:
+        create_video_from_images("frames", "output_video.mp4")
+
     return organisms
 
 
